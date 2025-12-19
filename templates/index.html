@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Anomaly Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 90%; max-width: 1000px; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        #status-badge { padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 0.9em; text-transform: uppercase; }
+        .status-normal { background: #e6fffa; color: #2c7a7b; border: 1px solid #81e6d9; }
+        .status-anomaly { background: #fff5f5; color: #c53030; border: 1px solid #feb2b2; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .debug-info { margin-top: 15px; font-size: 0.8em; color: #718096; border-top: 1px solid #edf2f7; padding-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2>Live System Monitor</h2>
+        <div id="status-badge" class="status-normal">System Normal</div>
+    </div>
+
+    <canvas id="cpuChart" height="120"></canvas>
+
+    <div class="debug-info">
+        Backend URL: <code id="url-text">/api/data</code> |
+        Last Update: <span id="last-update">Never</span> |
+        Points Loaded: <span id="point-count">0</span>
+    </div>
+</div>
+
+<script>
+    const ctx = document.getElementById('cpuChart').getContext('2d');
+    const badge = document.getElementById('status-badge');
+
+    // Initialize Chart with forced Y-axis scale
+    const cpuChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'CPU Usage %',
+                data: [],
+                borderColor: '#4fd1c5',
+                backgroundColor: 'rgba(79, 209, 197, 0.1)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointBackgroundColor: []
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true, max: 100, title: { display: true, text: 'Usage %' } },
+                x: { title: { display: true, text: 'Time' } }
+            },
+            animation: { duration: 0 } // Disable animation for smoother real-time feel
+        }
+    });
+
+    async function fetchData() {
+        try {
+            const response = await fetch('/api/data');
+            const data = await response.json();
+
+            // Debugging updates
+            document.getElementById('last-update').innerText = new Date().toLocaleTimeString();
+            document.getElementById('point-count').innerText = data.length;
+
+            if (data.length > 0) {
+                const labels = data.map(d => {
+                    // Handle both Unix timestamps and JS timestamps
+                    const date = new Date(d.timestamp > 1e11 ? d.timestamp : d.timestamp * 1000);
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                });
+
+                const cpuValues = data.map(d => d.cpu_usage);
+
+                // Color points red if they are anomalies (-1)
+                const pointColors = data.map(d => d.anomaly === -1 ? '#f56565' : '#4fd1c5');
+                const pointRadii = data.map(d => d.anomaly === -1 ? 8 : 4);
+
+                // Update Dataset
+                cpuChart.data.labels = labels;
+                cpuChart.data.datasets[0].data = cpuValues;
+                cpuChart.data.datasets[0].pointBackgroundColor = pointColors;
+                cpuChart.data.datasets[0].pointBorderColor = pointColors;
+                cpuChart.data.datasets[0].pointRadius = pointRadii;
+                cpuChart.update();
+
+                // Update Status Badge based on the LATEST point
+                const latest = data[data.length - 1];
+                if (latest.anomaly === -1) {
+                    badge.innerText = "🚨 Anomaly Detected";
+                    badge.className = "status-anomaly";
+                } else {
+                    badge.innerText = "✅ System Normal";
+                    badge.className = "status-normal";
+                }
+            }
+        } catch (error) {
+            console.error("Critical error fetching dashboard data:", error);
+        }
+    }
+
+    // Refresh every 2 seconds
+    setInterval(fetchData, 2000);
+    fetchData(); // Initial load
+</script>
+
+</body>
+</html>

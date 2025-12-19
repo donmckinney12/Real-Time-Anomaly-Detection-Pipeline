@@ -208,4 +208,8 @@ __marimo__/
 
 
 .DS_Store
-*.CSV
+data/*.CSV
+*.pyc
+.idea/
+.vscode/
+

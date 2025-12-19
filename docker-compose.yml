@@ -1,0 +1,10 @@
+services:
+  anomaly-detector:
+    build: .
+    container_name: real_time_detector
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    stdin_open: true # Keeps the container "alive"
+    tty: true        # Allows you to interact with it
